@@ -20,7 +20,7 @@ class IndexNetwork(object):
         """Define the tool (tool name is the name of the class)."""
         self.label = "IndexNetwork"
         self.description = ""
-        self.canRunInBackground = False
+        self.canRunInBackground = True
 
     def getParameterInfo(self):
         """Define parameter definitions"""
@@ -153,7 +153,7 @@ class SPDijkstra(object):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Shortest Path Dijkstra"
         self.description = "spDijkstra"
-        self.canRunInBackground = False
+        self.canRunInBackground = True
 
     def getParameterInfo(self):
         """Define parameter definitions"""
