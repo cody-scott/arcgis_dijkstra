@@ -148,6 +148,77 @@ class IndexNetwork(object):
             fl.write(out_data)
 
 
+class SPDijkstra(object):
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "Shortest Path Dijkstra"
+        self.description = "spDijkstra"
+        self.canRunInBackground = False
+
+    def getParameterInfo(self):
+        """Define parameter definitions"""
+        param0 = arcpy.Parameter(
+            displayName="Network Index",
+            name="network_index",
+            datatype="DEFile",
+            parameterType="Required",
+            direction="Input"
+        )
+        param1 = arcpy.Parameter(
+            displayName="Start Node",
+            name="start_node",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input"
+        )
+        param2 = arcpy.Parameter(
+            displayName="End Node",
+            name="end_node",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input"
+        )
+
+        param0.filter.list = ["json"]
+
+        params = [param0, param1, param2]
+        return params
+
+    def isLicensed(self):
+        """Set whether tool is licensed to execute."""
+        return True
+
+    def updateParameters(self, parameters):
+        """Modify the values and properties of parameters before internal
+        validation is performed.  This method is called whenever a parameter
+        has been changed."""
+        return
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter.  This method is called after internal validation."""
+        return
+
+    def execute(self, parameters, messages):
+        """The source code of the tool."""
+        network_data = parameters[0].valueAsText
+        start_node = int(parameters[1].valueAsText)
+        end_node = int(parameters[2].valueAsText)
+
+        net = None
+        with open(network_data, 'r') as fl:
+            net = json.loads(fl.read())
+
+        graph = Graph(net)
+
+        shortest_path = graph.dijkstra(start_node, end_node)
+        out_path = "->".join(["{}".format(i) for i in shortest_path])
+        arcpy.AddMessage(out_path)
+        print(out_path)
+
+        return
+    
+    
 class Graph:
     """
     source: https://dev.to/mxl/dijkstras-algorithm-in-python-algorithms-for-beginners-dkc
@@ -237,74 +308,3 @@ class Graph:
         if path:
             path.appendleft(current_vertex)
         return path
-
-
-class SPDijkstra(object):
-    def __init__(self):
-        """Define the tool (tool name is the name of the class)."""
-        self.label = "Shortest Path Dijkstra"
-        self.description = "spDijkstra"
-        self.canRunInBackground = False
-
-    def getParameterInfo(self):
-        """Define parameter definitions"""
-        param0 = arcpy.Parameter(
-            displayName="Network Index",
-            name="network_index",
-            datatype="DEFile",
-            parameterType="Required",
-            direction="Input"
-        )
-        param1 = arcpy.Parameter(
-            displayName="Start Node",
-            name="start_node",
-            datatype="GPLong",
-            parameterType="Required",
-            direction="Input"
-        )
-        param2 = arcpy.Parameter(
-            displayName="End Node",
-            name="end_node",
-            datatype="GPLong",
-            parameterType="Required",
-            direction="Input"
-        )
-
-        param0.filter.list = ["json"]
-
-        params = [param0, param1, param2]
-        return params
-
-    def isLicensed(self):
-        """Set whether tool is licensed to execute."""
-        return True
-
-    def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal
-        validation is performed.  This method is called whenever a parameter
-        has been changed."""
-        return
-
-    def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool
-        parameter.  This method is called after internal validation."""
-        return
-
-    def execute(self, parameters, messages):
-        """The source code of the tool."""
-        network_data = parameters[0].valueAsText
-        start_node = int(parameters[1].valueAsText)
-        end_node = int(parameters[2].valueAsText)
-
-        net = None
-        with open(network_data, 'r') as fl:
-            net = json.loads(fl.read())
-
-        graph = Graph(net)
-
-        shortest_path = graph.dijkstra(start_node, end_node)
-        out_path = "->".join(["{}".format(i) for i in shortest_path])
-        arcpy.AddMessage(out_path)
-        print(out_path)
-
-        return
