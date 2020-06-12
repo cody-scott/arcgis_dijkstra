@@ -20,7 +20,7 @@ class IndexNetwork(object):
         """Define the tool (tool name is the name of the class)."""
         self.label = "IndexNetwork"
         self.description = ""
-        self.canRunInBackground = True
+        self.canRunInBackground = False
 
     def getParameterInfo(self):
         """Define parameter definitions"""
@@ -82,8 +82,9 @@ class IndexNetwork(object):
         verts = self.get_verticies(feature, sr)
         vert_feature = self.vertices_to_feature(verts, "in_memory", sr)
         event_points = self.collect_events(vert_feature, output_gdb)
-        network_index = self.create_index(feature, event_points)
+        network_index = self.create_index(feature, event_points, "in_memory")
         self.save_index(network_index, output_folder)
+        arcpy.AddMessage("Complete")
         return
 
     def get_sr(self, feature):
@@ -92,23 +93,25 @@ class IndexNetwork(object):
 
     def get_verticies(self, feature, sr):
         out_feats = []
-        with arcpy.da.SearchCursor(feature, ["SHAPE@"]) as _sc:
+        with arcpy.da.SearchCursor(feature, ["SHAPE@", "OID@"]) as _sc:
             for row in _sc:
                 cent = row[0]
                 fp = arcpy.PointGeometry(cent.firstPoint, sr)
                 lp = arcpy.PointGeometry(cent.lastPoint, sr)
-
-                out_feats.append([fp])
-                out_feats.append([lp])
+                _id = row[1]
+                out_feats.append([fp, _id])
+                out_feats.append([lp, _id])
         return out_feats
 
     def vertices_to_feature(self, vertexes, temp_folder, sr):
         """Generate a feature class of supplied vertices"""
         ft = arcpy.CreateFeatureclass_management(
             temp_folder, "verts", "POINT", spatial_reference=sr)[0]
-        with arcpy.da.InsertCursor(ft, ["SHAPE@"]) as ic:
+
+        arcpy.AddField_management(ft, "BASE_ID", "LONG")
+        with arcpy.da.InsertCursor(ft, ["SHAPE@", "BASE_ID"]) as ic:
             for item in vertexes:
-                ic.insertRow((item[0],))
+                ic.insertRow((item[0],item[1],))
         return ft
 
     def collect_events(self, feature, out_folder):
@@ -116,31 +119,43 @@ class IndexNetwork(object):
             feature,
             os.path.join(out_folder, "network_points")
         )[0]
-        arcpy.AddField_management(ev, "ID", "LONG")
-        with arcpy.da.UpdateCursor(ev, ["ID"]) as uc:
+        arcpy.AddField_management(ev, "NET_ID", "LONG")
+        with arcpy.da.UpdateCursor(ev, ["NET_ID"]) as uc:
             for ix, row in enumerate(uc):
                 row[0] = ix
                 uc.updateRow(row)
         return ev
 
-    def create_index(self, feature, collect_points):
-        index_ls = []
-        point_fl = arcpy.MakeFeatureLayer_management(collect_points, "PT_FL")
-        with arcpy.da.SearchCursor(feature, "SHAPE@") as sc:
-            for row in sc:
-                shp = row[0]
-                pts = []
-                arcpy.SelectLayerByLocation_management(point_fl, "INTERSECT", shp, "0 Meters", "NEW_SELECTION")
-                with arcpy.da.SearchCursor(point_fl, ["ID"]) as pt_sc:
-                    for row in pt_sc:
-                        pts.append(row[0])
-                
-                if len(pts) == 0:
-                    continue
+    def create_index(self, feature, collect_points, temp_folder):
+        arcpy.AddMessage("Creating Index")
+        join_feat = arcpy.SpatialJoin_analysis(
+            feature, collect_points, "{}\\join_feats".format(temp_folder), 
+            "JOIN_ONE_TO_MANY", "KEEP_ALL",
+            search_radius="0 Meters"
+        )[0]
 
-                index_ls.append((pts[0], pts[1], shp.length))
+        arcpy.AddMessage("Joining")
+        index_dct = {}
+        with arcpy.da.SearchCursor(join_feat, ["TARGET_FID", "NET_ID", "SHAPE@LENGTH"]) as sc:
+            for row in sc:
+                c_val = index_dct.get(row[0], {"length": None, "nodes": []})
+                c_val['nodes'].append(row[1])
+                if c_val['length'] is None:
+                    c_val['length'] = row[2]
+                index_dct[row[0]] = c_val
         
-        return index_ls
+        arcpy.AddMessage("Building Index")
+        net_list = []
+        for key in index_dct:
+            vals = index_dct[key]
+
+            net_val = []
+            if len(vals['nodes']) == 1:
+                continue
+
+            net_val = [n for n in vals['nodes'] + [vals['length']]]
+            net_list.append(net_val)
+        return net_list
 
     def save_index(self, index_list, output_folder):
         out_data = json.dumps(index_list)
@@ -217,8 +232,8 @@ class SPDijkstra(object):
         print(out_path)
 
         return
-    
-    
+
+
 class Graph:
     """
     source: https://dev.to/mxl/dijkstras-algorithm-in-python-algorithms-for-beginners-dkc
